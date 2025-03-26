@@ -1,0 +1,84 @@
+import requests
+import csv
+import time
+import pandas as pd 
+import matplotlib.pyplot as plt 
+
+pharma_keywords = [
+    "pharma", "biotech", "therapeutics", "lifesciences", "biosciences",
+    "medicines", "pfizer", "roche", "novartis", "gsk", "moderna",
+    "astrazeneca", "biontech", "amgen", "gilead", "regeneron", "sanofi",
+    "johnson & johnson", "lilly", "bristol-myers", "merck", "abbvie"
+]
+
+def is_pharma_affiliated(authors):
+    for author in authors:
+        if "affiliations" in author and author["affiliations"]:
+            affiliation = author["affiliations"].lower()
+            if any(keyword in affiliation for keyword in pharma_keywords):
+                return True
+    return False
+
+def fetch_papers(query, api_key=None, max_results=50, retries=3):
+    url = "https://api.semanticscholar.org/graph/v1/paper/search"
+    params = {
+        "query": query,
+        "limit": max_results,
+        "fields": "title,authors,venue,year,url"
+    }
+    headers = {"x-api-key": api_key} if api_key else {}
+
+    for attempt in range(retries):
+        response = requests.get(url, params=params, headers=headers)
+        
+        if response.status_code == 200:
+            return response.json().get("data", [])
+        elif response.status_code == 429:  
+            wait_time = (attempt + 1) * 10  
+            print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+        else:
+            print("Error fetching data:", response.status_code, response.text)
+            return []
+
+    return []
+
+def save_to_csv(papers, filename="research_papers.csv"):
+    with open(filename, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Title", "Authors", "Venue", "Year", "URL"])
+        
+        for paper in papers:
+            authors = ", ".join([author["name"] for author in paper.get("authors", [])])
+            writer.writerow([paper["title"], authors, paper.get("venue", "N/A"), paper.get("year", "N/A"), paper["url"]])
+    
+    print(f"Saved {len(papers)} papers to {filename}")
+
+def visualize_research_trends(csv_filename="research_papers.csv"):
+    df = pd.read_csv(csv_filename)
+    
+    if df.empty:
+        print("No data available for visualization.")
+        return
+    
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce")  
+    df.dropna(subset=["Year"], inplace=True)  
+
+    df["Year"].value_counts().sort_index().plot(kind="bar", figsize=(10, 5), color="skyblue")
+    plt.xlabel("Year")
+    plt.ylabel("Number of Papers")
+    plt.title("Research Papers Published Over Time")
+    plt.show()
+
+
+if __name__ == "__main__":
+    query = input("Enter your research query (e.g., 'mRNA vaccines biotech'): ")
+    api_key = None  
+
+    papers = fetch_papers(query, api_key)
+
+    filtered_papers = [paper for paper in papers if is_pharma_affiliated(paper.get("authors", []))]
+
+    save_to_csv(filtered_papers)
+
+    visualize_research_trends()
