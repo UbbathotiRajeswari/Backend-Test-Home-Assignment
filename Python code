@@ -1,0 +1,52 @@
+import requests
+import csv
+
+def fetch_papers(query, api_key=None, max_results=50):
+    url = "https://api.semanticscholar.org/graph/v1/paper/search"
+    params = {
+        "query": query,
+        "limit": max_results,
+        "fields": "title,authors,venue,year,url"
+    }
+    headers = {"x-api-key": api_key} if api_key else {}
+    
+    response = requests.get(url, params=params, headers=headers)
+    if response.status_code == 200:
+        return response.json().get("data", [])
+    else:
+        print("Error fetching data:", response.status_code, response.text)
+        return []
+
+def is_pharma_affiliated(authors):
+    pharma_keywords = [
+    "pharma", "biotech", "therapeutics", "lifesciences", 
+    "biosciences", "medicines", "pfizer", "roche", "novartis", 
+    "gsk", "moderna", "astrazeneca"
+]
+    for author in authors:
+        if "affiliations" in author and author["affiliations"]:
+            affiliation = author["affiliations"].lower()
+            if any(keyword in affiliation for keyword in pharma_keywords):
+                return True
+    return False
+
+def save_to_csv(papers, filename="research_papers.csv"):
+    with open(filename, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Title", "Authors", "Venue", "Year", "URL"])
+        for paper in papers:
+            for author in paper.get("authors", []):
+                print(author.get("name"), "-", author.get("affiliations", "No affiliation found"))
+                writer.writerow([paper["title"], author, paper.get("venue", ""), paper.get("year", ""), paper.get("url", "")])
+    print(f"Saved {len(papers)} papers to {filename}")
+
+def main():
+    query = input("Enter your research query: ")
+    api_key = None          
+    papers = fetch_papers(query, api_key)
+    
+    filtered_papers = papers
+    save_to_csv(filtered_papers)
+    
+if __name__ == "__main__":
+    main()
